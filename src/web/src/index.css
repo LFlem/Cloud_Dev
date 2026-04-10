@@ -1,0 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
+:root {
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+  color: #f4f9ff;
+  background-color: #020817;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(46, 140, 255, 0.32), transparent 40%),
+    radial-gradient(circle at 90% 100%, rgba(53, 233, 166, 0.2), transparent 35%),
+    #061224;
+}
