@@ -12,10 +12,6 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Inject API URL at build time
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
-
 # Build the app
 RUN npm run build
 
