@@ -10,18 +10,24 @@ from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 app = func.FunctionApp()
 
-# Config
-COSMOS_ENDPOINT = os.environ["COSMOS_ENDPOINT"]
-COSMOS_KEY = os.environ["COSMOS_KEY"]
-COSMOS_DATABASE = os.environ["COSMOS_DATABASE"]
-COSMOS_CONTAINER = os.environ["COSMOS_CONTAINER"]
-SERVICE_BUS_CONNECTION = os.environ["SERVICE_BUS_CONNECTION_STRING"]
-SERVICE_BUS_QUEUE = os.environ["SERVICE_BUS_QUEUE_NAME"]
+
+def get_config():
+    return {
+        "COSMOS_ENDPOINT": os.environ["COSMOS_ENDPOINT"],
+        "COSMOS_KEY": os.environ["COSMOS_KEY"],
+        "COSMOS_DATABASE": os.environ["COSMOS_DATABASE"],
+        "COSMOS_CONTAINER": os.environ["COSMOS_CONTAINER"],
+        "SERVICE_BUS_CONNECTION": os.environ["SERVICE_BUS_CONNECTION_STRING"],
+        "SERVICE_BUS_QUEUE": os.environ["SERVICE_BUS_QUEUE_NAME"],
+    }
+
 
 def get_cosmos_container():
-    client = CosmosClient(COSMOS_ENDPOINT, COSMOS_KEY)
-    db = client.get_database_client(COSMOS_DATABASE)
-    return db.get_container_client(COSMOS_CONTAINER)
+    cfg = get_config()
+    client = CosmosClient(cfg["COSMOS_ENDPOINT"], cfg["COSMOS_KEY"])
+    db = client.get_database_client(cfg["COSMOS_DATABASE"])
+    return db.get_container_client(cfg["COSMOS_CONTAINER"])
+
 
 def update_document_status(document_id: str, status: str, extra: dict = {}):
     container = get_cosmos_container()
@@ -40,6 +46,7 @@ def update_document_status(document_id: str, status: str, extra: dict = {}):
         doc.update(extra)
         container.upsert_item(doc)
 
+
 def generate_tags_fallback(file_name: str) -> list:
     name = file_name.lower().replace("_", " ").replace("-", " ").replace(".", " ")
     words = [w for w in name.split() if len(w) > 2 and w not in ["the", "and", "for", "les", "des", "une", "par"]]
@@ -47,6 +54,7 @@ def generate_tags_fallback(file_name: str) -> list:
     if "pdf" in name: tags.append("pdf")
     if "cv" in name or "resume" in name: tags.extend(["cv", "rh"])
     return list(set(tags))[:8]
+
 
 def generate_tags_ai(file_name: str) -> list:
     try:
@@ -77,6 +85,7 @@ Retourne uniquement un tableau JSON de chaînes, sans explication."""
 @app.blob_trigger(arg_name="myblob", path="jobs/{name}",
                   connection="myiotstock_STORAGE")
 def BlobTriggerWorkerUp1(myblob: func.InputStream):
+    cfg = get_config()
     correlation_id = str(uuid.uuid4())
     blob_name = myblob.name
     file_name = blob_name.split("/")[-1]
@@ -90,15 +99,12 @@ def BlobTriggerWorkerUp1(myblob: func.InputStream):
         "status": "RECEIVED"
     }))
 
-    # Extraire documentId depuis le nom du blob (format: documentId_fileName)
     parts = file_name.split("_", 1)
     document_id = parts[0] if len(parts) > 1 else file_name
 
     try:
-        # Mettre à jour le statut CosmosDB → UPLOADED
         update_document_status(document_id, "UPLOADED")
 
-        # Publier message dans Service Bus
         message_body = json.dumps({
             "documentId": document_id,
             "fileName": file_name,
@@ -108,11 +114,10 @@ def BlobTriggerWorkerUp1(myblob: func.InputStream):
             "correlationId": correlation_id
         })
 
-        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONNECTION) as sb_client:
-            with sb_client.get_queue_sender(SERVICE_BUS_QUEUE) as sender:
+        with ServiceBusClient.from_connection_string(cfg["SERVICE_BUS_CONNECTION"]) as sb_client:
+            with sb_client.get_queue_sender(cfg["SERVICE_BUS_QUEUE"]) as sender:
                 sender.send_messages(ServiceBusMessage(message_body))
 
-        # Mettre à jour → QUEUED
         update_document_status(document_id, "QUEUED")
 
         logging.info(json.dumps({
@@ -138,7 +143,7 @@ def BlobTriggerWorkerUp1(myblob: func.InputStream):
 
 @app.service_bus_queue_trigger(
     arg_name="msg",
-    queue_name="%SERVICE_BUS_QUEUE_NAME%",
+    queue_name="document-processing",
     connection="SERVICE_BUS_CONNECTION_STRING"
 )
 def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
@@ -158,10 +163,8 @@ def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
             "status": "STARTED"
         }))
 
-        # → PROCESSING
         update_document_status(document_id, "PROCESSING")
 
-        # Tagging IA
         logging.info(json.dumps({
             "correlationId": correlation_id,
             "documentId": document_id,
@@ -179,7 +182,6 @@ def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
             "tags": tags
         }))
 
-        # → PROCESSED
         update_document_status(document_id, "PROCESSED", {
             "tags": tags,
             "processedAt": datetime.now(timezone.utc).isoformat()
@@ -199,7 +201,7 @@ def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
             "status": "ERROR",
             "error": f"Message mal formé: {str(e)}"
         }))
-        raise  # → DLQ après max retries
+        raise
 
     except Exception as e:
         logging.error(json.dumps({
@@ -208,14 +210,14 @@ def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
             "status": "ERROR",
             "error": str(e)
         }))
-        raise  # → DLQ après max retries
+        raise
 
 
 # ─── FUNCTION 3 : DLQ Alert ──────────────────────────────────────────────────
 
 @app.service_bus_queue_trigger(
     arg_name="msg",
-    queue_name="%SERVICE_BUS_QUEUE_NAME%/$deadletterqueue",
+    queue_name="document-processing/$deadletterqueue",
     connection="SERVICE_BUS_CONNECTION_STRING"
 )
 def DLQAlertFunction(msg: func.ServiceBusMessage):
