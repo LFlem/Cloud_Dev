@@ -113,3 +113,70 @@ button:disabled {
 .job a {
   color: #b0f1ff;
 }
+
+/* ── Pipeline de statuts ── */
+.pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.8rem 0 0.5rem;
+}
+
+.step {
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #7ba8d0;
+}
+
+.step.done {
+  background: rgba(61, 230, 167, 0.18);
+  border-color: rgba(61, 230, 167, 0.4);
+  color: #3de6a7;
+}
+
+.step.active {
+  background: rgba(50, 198, 255, 0.22);
+  border-color: rgba(50, 198, 255, 0.6);
+  color: #32c6ff;
+  box-shadow: 0 0 8px rgba(50, 198, 255, 0.35);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.step.error-step {
+  background: rgba(255, 84, 108, 0.18);
+  border-color: rgba(255, 84, 108, 0.5);
+  color: #ff546c;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.status-message {
+  margin: 0.4rem 0 0;
+  font-size: 0.88rem;
+  color: #b8d4f0;
+}
+
+/* ── Tags IA ── */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+.tag {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(104, 226, 201, 0.18);
+  border: 1px solid rgba(104, 226, 201, 0.4);
+  color: #68e2c9;
+}

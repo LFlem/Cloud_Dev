@@ -3,8 +3,14 @@ import logging
 import json
 import os
 import uuid
+import hmac
+import hashlib
+import base64
+import time
+from urllib.parse import quote
 from datetime import datetime, timezone
 
+import requests as http_requests
 from azure.cosmos import CosmosClient
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
@@ -80,6 +86,63 @@ Retourne uniquement un tableau JSON de chaînes, sans explication."""
     return generate_tags_fallback(file_name)
 
 
+# ─── SignalR helpers ──────────────────────────────────────────────────────────
+
+def _parse_signalr_connection(conn_str: str) -> tuple:
+    parts = dict(p.split("=", 1) for p in conn_str.rstrip(";").split(";") if "=" in p)
+    return parts.get("Endpoint", "").rstrip("/"), parts.get("AccessKey", "")
+
+
+def _signalr_jwt(audience: str, access_key: str, ttl: int = 60) -> str:
+    header = base64.urlsafe_b64encode(
+        json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
+    ).rstrip(b"=").decode()
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"aud": audience, "exp": int(time.time()) + ttl}).encode()
+    ).rstrip(b"=").decode()
+    sig_input = f"{header}.{payload}".encode()
+    sig = base64.urlsafe_b64encode(
+        hmac.new(access_key.encode(), sig_input, hashlib.sha256).digest()
+    ).rstrip(b"=").decode()
+    return f"{header}.{payload}.{sig}"
+
+
+def send_signalr_notification(payload: dict, hub: str = "notifications") -> None:
+    conn_str = os.environ.get("AzureSignalRConnectionString", "")
+    if not conn_str:
+        return
+    endpoint, key = _parse_signalr_connection(conn_str)
+    audience = f"{endpoint}/api/v1/hubs/{hub}"
+    token = _signalr_jwt(audience, key)
+    try:
+        http_requests.post(
+            audience,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"target": "statusUpdate", "arguments": [payload]},
+            timeout=5,
+        )
+    except Exception as e:
+        logging.warning(f"SignalR notification failed: {e}")
+
+
+# ─── FUNCTION 0 : SignalR Negotiate ──────────────────────────────────────────
+
+@app.route(route="negotiate", methods=["GET", "POST"], auth_level=func.AuthLevel.ANONYMOUS)
+def negotiate(req: func.HttpRequest) -> func.HttpResponse:
+    conn_str = os.environ.get("AzureSignalRConnectionString", "")
+    if not conn_str:
+        return func.HttpResponse("AzureSignalRConnectionString not configured", status_code=500)
+    endpoint, key = _parse_signalr_connection(conn_str)
+    hub = "notifications"
+    client_url = f"{endpoint}/client/?hub={hub}"
+    token = _signalr_jwt(client_url, key, ttl=3600)
+    return func.HttpResponse(
+        json.dumps({"url": client_url, "accessToken": token}),
+        mimetype="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 # ─── FUNCTION 1 : Blob Trigger ───────────────────────────────────────────────
 
 @app.blob_trigger(arg_name="myblob", path="jobs/{name}",
@@ -119,6 +182,7 @@ def BlobTriggerWorkerUp1(myblob: func.InputStream):
                 sender.send_messages(ServiceBusMessage(message_body))
 
         update_document_status(document_id, "QUEUED")
+        send_signalr_notification({"documentId": document_id, "status": "QUEUED", "message": "Fichier reçu, en attente de traitement"})
 
         logging.info(json.dumps({
             "correlationId": correlation_id,
@@ -137,6 +201,7 @@ def BlobTriggerWorkerUp1(myblob: func.InputStream):
             "error": str(e)
         }))
         update_document_status(document_id, "ERROR", {"errorMessage": str(e)})
+        send_signalr_notification({"documentId": document_id, "status": "ERROR", "message": str(e)})
 
 
 # ─── FUNCTION 2 : Service Bus Processing ─────────────────────────────────────
@@ -164,6 +229,7 @@ def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
         }))
 
         update_document_status(document_id, "PROCESSING")
+        send_signalr_notification({"documentId": document_id, "status": "PROCESSING", "message": "Traitement IA en cours"})
 
         logging.info(json.dumps({
             "correlationId": correlation_id,
@@ -186,6 +252,7 @@ def ServiceBusProcessingFunction(msg: func.ServiceBusMessage):
             "tags": tags,
             "processedAt": datetime.now(timezone.utc).isoformat()
         })
+        send_signalr_notification({"documentId": document_id, "status": "PROCESSED", "message": "Tagging terminé", "tags": tags})
 
         logging.info(json.dumps({
             "correlationId": correlation_id,
@@ -241,6 +308,7 @@ def DLQAlertFunction(msg: func.ServiceBusMessage):
                 "errorAt": datetime.now(timezone.utc).isoformat(),
                 "dlqBody": body[:500]
             })
+            send_signalr_notification({"documentId": document_id, "status": "ERROR", "message": "Erreur de traitement — message en DLQ"})
 
             logging.error(json.dumps({
                 "correlationId": correlation_id,
