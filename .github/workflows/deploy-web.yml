@@ -12,8 +12,8 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/web
-  AZURE_WEBAPP_NAME: mon-iot-app-web
-  AZURE_RESOURCE_GROUP: rg-ynov-cloud
+  AZURE_WEBAPP_NAME: cloudfront
+  AZURE_RESOURCE_GROUP: mobiot
 
 jobs:
   build-and-deploy:
