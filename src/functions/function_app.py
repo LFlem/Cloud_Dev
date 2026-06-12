@@ -38,9 +38,9 @@ def update_document_status(document_id: str, status: str, extra: dict = {}):
     for key, value in extra.items():
         patch_ops.append({"op": "add", "path": f"/{key}", "value": value})
     try:
-        container.patch_item(item=document_id, partition_key=document_id, patch_operations=patch_ops)
+        container.patch_item(item=document_id, partition_key="JOB", patch_operations=patch_ops)
     except Exception:
-        doc = container.read_item(item=document_id, partition_key=document_id)
+        doc = container.read_item(item=document_id, partition_key="JOB")
         doc["status"] = status
         doc["updatedAt"] = datetime.now(timezone.utc).isoformat()
         doc.update(extra)
@@ -99,8 +99,8 @@ def BlobTriggerWorkerUp1(myblob: func.InputStream):
         "status": "RECEIVED"
     }))
 
-    parts = file_name.split("_", 1)
-    document_id = parts[0] if len(parts) > 1 else file_name
+    # jobId is the path segment between container name and filename: jobs/{jobId}/{filename}
+    document_id = blob_name.split("/")[-2]
 
     try:
         update_document_status(document_id, "UPLOADED")

@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-    - "src/api/*"
-    - ".github/workflows/api-build-push.yml"
+      - "src/api/**"
+      - ".github/workflows/api-build-push.yml"
   workflow_dispatch:
 
 env: 
@@ -34,7 +34,6 @@ jobs:
           tags: |
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
-        #uses: docker/setup-buildx-action@v4
 
       - name: Update Azure App Service
         uses: azure/webapps-deploy@v3

@@ -138,3 +138,5 @@ infra/arm/*.deployment.json
 tmp/
 temp/
 .cache/
+project_doc.md
+CLAUDE.md
