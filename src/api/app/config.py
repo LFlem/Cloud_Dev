@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     service_bus_connection_string: str = ""
     service_bus_queue_name: str = "document-processing"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_file_override=False  # variables d'env système ont priorité sur .env
+    )
 
 settings = Settings()
