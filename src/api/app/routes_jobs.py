@@ -44,6 +44,9 @@ def get_jobs(jobId: str):
 
 @router.post("/{jobId}/retry", status_code=200, summary="Retry a job", description="Republish a job message to Service Bus for reprocessing.")
 def retry_job(jobId: str):
+    import logging
+    logging.warning(f"SERVICE_BUS_CONNECTION_STRING value: '{settings.service_bus_connection_string[:20] if settings.service_bus_connection_string else 'EMPTY'}'")
+
     container = get_cosmos_container()
     try:
         item = container.read_item(item=jobId, partition_key="JOB")
