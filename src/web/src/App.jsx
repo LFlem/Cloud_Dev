@@ -36,8 +36,14 @@ function App() {
   const connectSignalR = async (jobId) => {
     if (!functionsUrl) return
     try {
+      // Appel manuel au endpoint negotiate pour obtenir l'URL SignalR + token
+      const resp = await fetch(`${functionsUrl}/api/negotiate`)
+      if (!resp.ok) throw new Error(`negotiate ${resp.status}`)
+      const { url, accessToken } = await resp.json()
+
+      // On passe l'URL retournée directement — le client ne rajoute PAS /negotiate ici
       const conn = new signalR.HubConnectionBuilder()
-        .withUrl(`${functionsUrl}/api/negotiate`)
+        .withUrl(url, { accessTokenFactory: () => accessToken })
         .withAutomaticReconnect()
         .configureLogging(signalR.LogLevel.Warning)
         .build()
