@@ -36,7 +36,7 @@ jobs:
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
           build-args: |
-            VITE_API_BASE_URL=https://mon-iot-api.azurewebsites.net
+            VITE_API_BASE_URL=https://mon-iot-api-grcfdva0aydpfzc9.spaincentral-01.azurewebsites.net
             VITE_FUNCTIONS_BASE_URL=https://myiotappcode.azurewebsites.net
 
       - name: Deploy to Azure Web App
